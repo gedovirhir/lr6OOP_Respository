@@ -2,6 +2,7 @@ import clr
 import random
 import time
 from abc import ABC, abstractmethod
+import numpy as np
 
 clr.AddReference('System')
 clr.AddReference('System.IO')
@@ -10,6 +11,7 @@ clr.AddReference('System.Reflection')
 clr.AddReference('System.Threading')
 clr.AddReference('System.Windows.Forms')
 
+from System import EventHandler
 import System.IO
 import System.Drawing as Dr
 import System.Reflection
@@ -34,11 +36,13 @@ class __storageList__(ABC): #снаружи наше "хранилище" вед
     def clear(self): #очистка списка
         pass 
 
+
 class Node(object):
     def __init__(self, x = None, v = None):
         self.key = x
         self.next = None
         self.prev = v
+    
     def deleteThis(self):
         if self.prev:
             self.prev.next = self.next
@@ -46,7 +50,7 @@ class Node(object):
             self.next.prev = self.prev
         del self
 
-class CCircleStorage(__storageList__):
+class storage(__storageList__):
     def __init__(self):
         self.head = None
         self.len = 0
@@ -122,35 +126,132 @@ class CCircleStorage(__storageList__):
         for i in range(self.len):
             self.deleteIndex(0)
 
-    def exclusiveSelect(self, node):
-        forwardNode = node.next
-        prevNode = node.prev
-        node.key.selected = True
-        while forwardNode:
-            forwardNode.key.selected = False
-            forwardNode = forwardNode.next
-        while prevNode:
-            prevNode.key.selected = False
-            prevNode = prevNode.prev
-    def inclusiveSelect(self, node):
-        node.key.selected = True
+class ObjectStorage(storage):
+    def __init__(self):
+        super().__init__()
+        self.handler = EventHandler
+        self.objectsList = [CCircle, square, triangle, line]      
+    def add(self, x, index = None):
+        super().add(x,index)
+        self.handler.Invoke(self, None)
+
+    def select(self, node, CtrlPressed):
+        if CtrlPressed:
+            node.key.selected = True
+        else:
+            forwardNode = node.next
+            prevNode = node.prev
+            node.key.selected = True
+            while forwardNode:
+                forwardNode.key.selected = False
+                forwardNode = forwardNode.next
+            while prevNode:
+                prevNode.key.selected = False
+                prevNode = prevNode.prev
+        self.handler.Invoke(self, None)
+
     def deleteSelected(self):
         someNode = self.head
         for i in range(self.len):
             if someNode.key.selected:
                 self.deleteNode(someNode)
             someNode = someNode.next
+        
+        self.handler.Invoke(self, None)
+    def drawNodeObject(self, node, flagGraphics, drawPen):
+        node.key.draw(flagGraphics, drawPen)
+    def drawAllObjects(self, flagGraphics, drawPen):
+        for i in range(self.len):
+            self.drawNodeObject(self.getNode(i), flagGraphics, drawPen)
+    def hitNodeInfo(self, node, X, Y):
+        return(node.key.checkBorder(X,Y))
+    def hitInfo(self, X, Y):
+        for i in range(self.len):
+            someNode = self.getNode(i)
+            if self.hitNodeInfo(someNode, X, Y):
+                return someNode
+        return None
 
 
     
-
-class CCircle(object):
+    
+class figure(object):
     def __init__(self, x, y):
         self.xcord = x
         self.ycord = y
-        self.rad = 15
 
         self.selected = False
+    def checkBorder(self, X, Y):
+        return(self.xcord == X) and (self.ycord == Y)
+class CCircle(figure):
+    def __init__(self, x, y):
+        super().__init__(x,y)
+
+        self.rad = 15
+    def draw(self, flagGraphics, drawPen):
+        if self.selected:
+            flagGraphics.FillEllipse(Dr.Brushes.LightGreen, self.xcord - self.rad, self.ycord-self.rad, self.rad*2,self.rad*2)
+        flagGraphics.DrawEllipse(drawPen,self.xcord - self.rad, self.ycord-self.rad, self.rad*2,self.rad*2)
+    def checkBorder(self, X, Y):
+        return ((self.xcord + self.rad)>X>(self.xcord - self.rad)) and ((self.ycord + self.rad)>Y>(self.ycord - self.rad))
+    def __str__(self):
+        return "Circle"
+    
+    
+class square(figure):
+    def __init__(self, x, y):
+        super().__init__(x,y)
+
+        self.width = 30
+        self.height = 30
+    def draw(self, flagGraphics, drawPen):
+        if self.selected:
+            flagGraphics.FillRectangle(Dr.Brushes.LightGreen, self.xcord, self.ycord, self.width,self.height)
+        flagGraphics.DrawRectangle(drawPen,self.xcord, self.ycord, self.width,self.height)
+    def checkBorder(self, X,Y):
+        return ((self.xcord) < X < (self.xcord + self.width)) and ((self.ycord)<Y<(self.ycord + self.height))
+    def __str__(self):
+        return "Square"
+    
+class triangle(figure):
+    def __init__(self, x, y):
+        super().__init__(x,y)
+
+        self.width = 30
+        self.height = int(round(self.width*(np.sin(np.deg2rad(60)))))
+        self.updatePoints()
+    def updatePoints(self):
+        self.points = [Dr.Point(self.xcord,self.ycord), Dr.Point(self.xcord+self.width,self.ycord), Dr.Point(self.xcord+(self.width//2), self.ycord+self.height)]
+    
+    def draw(self, flagGraphics, drawPen):
+        self.updatePoints()
+        if self.selected:
+            flagGraphics.FillPolygon(Dr.Brushes.LightGreen, self.points)
+        flagGraphics.DrawPolygon(drawPen,self.points)
+    def checkBorder(self, X, Y):
+        return ((self.xcord)<X<(self.xcord + self.width)) and ((self.ycord)<Y<(self.ycord+(X-self.xcord)*np.sqrt(3)))
+    def __str__(self):
+        return "Triangle"
+        
+class line(figure):
+    def __init__(self, x,y):
+        super().__init__(x,y)
+        self.lengh = 100
+        self.x1 = self.xcord+self.lengh
+        self.y1 = self.ycord
+    def draw(self, flagGraphics, drawPen):
+        bruh = Dr.Pen(Dr.Brushes.LightGreen)
+        bruh.Width = 3
+        if self.selected:
+            flagGraphics.DrawLine(bruh,self.xcord, self.ycord, self.x1, self.y1)
+            return
+        flagGraphics.DrawLine(drawPen,self.xcord, self.ycord, self.x1, self.y1)
+    def checkBorder(self, X, Y):
+        return self.ycord+15 > Y > self.ycord-15
+    def __str__(self):
+        return "Line"
+
+
 
 
 class form1(System.Windows.Forms.Form):
@@ -161,16 +262,14 @@ class form1(System.Windows.Forms.Form):
         caption_height = WinForm.SystemInformation.CaptionHeight
         self.MinimumSize =Dr.Size(392,(117 + caption_height))
         self.KeyPreview  = True
-        self.CtrlPressed = False
 
-        self.canvas = Dr.Bitmap(1200,700)
-        self.CircleStorage = CCircleStorage()
+        self.CtrlPressed = False
+        self.canvas = None
+        self.flagGraphics = None
+        self.ObjectStorage = ObjectStorage()
+
         self.drawPen = Dr.Pen(Dr.Brushes.DeepSkyBlue)
         self.drawPen.Width = 2
-        self.flagGraphics = Dr.Graphics.FromImage(self.canvas)
-
-        self.drawPen2 = Dr.Pen(Dr.Brushes.Purple)
-        self.drawPen2.Width = 15
         
         self.InitiliazeComponent()
         
@@ -185,6 +284,8 @@ class form1(System.Windows.Forms.Form):
         self.SwitchObjCB = WinForm.ComboBox()
         self.ChangeSizeSB = WinForm.HScrollBar()
         self.SizeLabel = WinForm.Label()
+
+        self.ObjectStorage.handler = EventHandler(self.drawObjects)
 
         self.KeyDown += self.Form_KeyDown
         self.KeyUp += self.Form_KeyUp
@@ -206,6 +307,10 @@ class form1(System.Windows.Forms.Form):
 
         self.SwitchObjCB.Location = Dr.Point(1250,10)
         self.SwitchObjCB.Size = Dr.Size(300,300)
+        self.SwitchObjCB.Sorted = False
+        self.SwitchObjCB.Items.AddRange([ "Circle","Square", "Triangle", "Line" ])
+        self.SwitchObjCB.SelectedIndex = 2
+        self.SwitchObjCB.DropDownStyle = WinForm.ComboBoxStyle.DropDownList
 
         self.ChangeSizeSB.Location = Dr.Point(1250,50)
         self.ChangeSizeSB.Size = Dr.Size(300,20)
@@ -224,25 +329,20 @@ class form1(System.Windows.Forms.Form):
         self.components.Dispose()
         WinForm.Form.Dispose(self)
 
-    def drawAllCircles(self):
+    def drawObjects(self, sender, args):
         self.ImagePB.Image = None
-        self.canvas = Dr.Bitmap(700,700)
+        self.canvas = Dr.Bitmap(self.ImagePB.Width, self.ImagePB.Height)
         self.flagGraphics = Dr.Graphics.FromImage(self.canvas)
-        for i in range(self.CircleStorage.len):
-            cr = (self.CircleStorage.getNode(i)).key
-            if cr.selected:
-                self.flagGraphics.FillEllipse(Dr.Brushes.LightGreen, cr.xcord - cr.rad, cr.ycord-cr.rad, cr.rad*2,cr.rad*2)
-                self.flagGraphics.DrawEllipse(self.drawPen,cr.xcord - cr.rad, cr.ycord-cr.rad, cr.rad*2,cr.rad*2)
-            else:
-                self.flagGraphics.DrawEllipse(self.drawPen,cr.xcord - cr.rad, cr.ycord-cr.rad, cr.rad*2,cr.rad*2)
+
+        self.ObjectStorage.drawAllObjects(self.flagGraphics, self.drawPen)
+
         self.ImagePB.Image = self.canvas
 
     def Form_KeyDown(self, sender, args):
         if args.KeyCode == WinForm.Keys.ControlKey:
             self.CtrlPressed = True
         if args.KeyCode == WinForm.Keys.Delete:
-            self.CircleStorage.deleteSelected()
-            self.drawAllCircles()
+            self.ObjectStorage.deleteSelected()
     def Form_KeyUp(self, sender, args):
         if args.KeyCode == WinForm.Keys.ControlKey:
             self.CtrlPressed = False
@@ -250,21 +350,11 @@ class form1(System.Windows.Forms.Form):
 
     def ImagePB_KeyDown(self, sender, args):
         if args.Button == WinForm.MouseButtons.Right:
-            casualCircle = CCircle(args.X, args.Y)
-            self.CircleStorage.add(casualCircle)
+            self.ObjectStorage.add(self.ObjectStorage.objectsList[self.SwitchObjCB.SelectedIndex](args.X, args.Y))
 
-            self.drawAllCircles()
         elif args.Button == WinForm.MouseButtons.Left:
-            for i in range(self.CircleStorage.len):
-                casualNode = self.CircleStorage.getNode(i)
-                casualCirc = casualNode.key
-                if ((casualCirc.xcord + casualCirc.rad)>args.X>(casualCirc.xcord - casualCirc.rad)) and ((casualCirc.ycord + casualCirc.rad)>args.Y>(casualCirc.ycord - casualCirc.rad)):
-                    if self.CtrlPressed:
-                        self.CircleStorage.inclusiveSelect(casualNode)
-                    else:
-                        self.CircleStorage.exclusiveSelect(casualNode)
-                    
-                    self.drawAllCircles()
+            if self.ObjectStorage.hitInfo(args.X, args.Y):
+                self.ObjectStorage.select((self.ObjectStorage.hitInfo(args.X, args.Y)), self.CtrlPressed)
 
 
 
@@ -274,8 +364,8 @@ class form1(System.Windows.Forms.Form):
     def butt_Click(self, sender, args):
         self.ImagePB.Image = None
         self.flagGraphics = Dr.Graphics.FromImage(self.canvas)
-        self.CircleStorage.clear()
-        self.canvas = Dr.Bitmap(1200,700)
+        self.ObjectStorage.clear()
+        self.canvas = Dr.Bitmap(self.ImagePB.Width, self.ImagePB.Height)
 
 
 
