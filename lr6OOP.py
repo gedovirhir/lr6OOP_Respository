@@ -130,7 +130,8 @@ class ObjectStorage(storage):
     def __init__(self):
         super().__init__()
         self.handler = EventHandler
-        self.objectsList = [CCircle, square, triangle, line]      
+        self.objectsList = [CCircle, square, triangle, line]   
+        self.lastPressedNode = None   
     def add(self, x, index = None):
         super().add(x,index)
         self.handler.Invoke(self, None)
@@ -149,16 +150,18 @@ class ObjectStorage(storage):
                 prevNode.key.selected = False
                 prevNode = prevNode.prev
         self.handler.Invoke(self, None)
-
-    def deleteSelected(self):
+    def iterationOfSelectedWithFunc(self, func, *args):
         someNode = self.head
         for i in range(self.len):
             if someNode.key.selected:
-                self.deleteNode(someNode)
+                func(someNode, *args)
             someNode = someNode.next
+    def deleteSelected(self):
+        self.iterationOfSelectedWithFunc(self.deleteNode)
         
         self.handler.Invoke(self, None)
     def drawNodeObject(self, node, flagGraphics, drawPen):
+        drawPen.Color = node.key.color
         node.key.draw(flagGraphics, drawPen)
     def drawAllObjects(self, flagGraphics, drawPen):
         for i in range(self.len):
@@ -167,25 +170,42 @@ class ObjectStorage(storage):
         return(node.key.checkBorder(X,Y))
     def hitInfo(self, X, Y):
         for i in range(self.len):
-            someNode = self.getNode(i)
-            if self.hitNodeInfo(someNode, X, Y):
-                return someNode
+            if self.hitNodeInfo(self.getNode(i), X, Y):
+                return self.getNode(i)
         return None
-
-
+    def changeSizeNode(self, node, val):
+        node.key.changeSize(val)
+        self.handler.Invoke(self, None)
+    def changeSizeSelected(self, val):
+        self.iterationOfSelectedWithFunc(self.changeSizeNode, val)
+    def changeCordsNode(self, node, deltaX, deltaY):
+        node.key.changeCords(deltaX,deltaY)
+        self.handler.Invoke(self, None)
+    def changeCordsSelected(self, deltaX,deltaY):
+        self.iterationOfSelectedWithFunc(self.changeCordsNode,deltaX, deltaY)
+    def changeColorNode(self, node, color):
+        node.key.color = color
+        self.handler.Invoke(self,None)
+    def changeColorSelected(self, color):
+        self.iterationOfSelectedWithFunc(self.changeColorNode, color)
+    
     
     
 class figure(object):
-    def __init__(self, x, y):
+    def __init__(self, x, y, color):
         self.xcord = x
         self.ycord = y
+        self.color = color
 
         self.selected = False
     def checkBorder(self, X, Y):
         return(self.xcord == X) and (self.ycord == Y)
+    def changeCords(self, deltaX,deltaY):
+        self.xcord += deltaX
+        self.ycord += deltaY
 class CCircle(figure):
-    def __init__(self, x, y):
-        super().__init__(x,y)
+    def __init__(self, x, y,color):
+        super().__init__(x,y,color)
 
         self.rad = 15
     def draw(self, flagGraphics, drawPen):
@@ -194,13 +214,15 @@ class CCircle(figure):
         flagGraphics.DrawEllipse(drawPen,self.xcord - self.rad, self.ycord-self.rad, self.rad*2,self.rad*2)
     def checkBorder(self, X, Y):
         return ((self.xcord + self.rad)>X>(self.xcord - self.rad)) and ((self.ycord + self.rad)>Y>(self.ycord - self.rad))
+    def changeSize(self, val):
+        self.rad = 15 + val
     def __str__(self):
         return "Circle"
     
     
 class square(figure):
-    def __init__(self, x, y):
-        super().__init__(x,y)
+    def __init__(self, x, y, color):
+        super().__init__(x,y,color)
 
         self.width = 30
         self.height = 30
@@ -210,12 +232,15 @@ class square(figure):
         flagGraphics.DrawRectangle(drawPen,self.xcord, self.ycord, self.width,self.height)
     def checkBorder(self, X,Y):
         return ((self.xcord) < X < (self.xcord + self.width)) and ((self.ycord)<Y<(self.ycord + self.height))
+    def changeSize(self, val):
+        self.width = 30 + val
+        self.height = 30 + val
     def __str__(self):
         return "Square"
     
 class triangle(figure):
-    def __init__(self, x, y):
-        super().__init__(x,y)
+    def __init__(self, x, y,color):
+        super().__init__(x,y,color)
 
         self.width = 30
         self.height = int(round(self.width*(np.sin(np.deg2rad(60)))))
@@ -230,12 +255,15 @@ class triangle(figure):
         flagGraphics.DrawPolygon(drawPen,self.points)
     def checkBorder(self, X, Y):
         return ((self.xcord)<X<(self.xcord + self.width)) and ((self.ycord)<Y<(self.ycord+(X-self.xcord)*np.sqrt(3)))
+    def changeSize(self, val):
+        self.width = 30 + val
+        self.height = int(round(self.width*(np.sin(np.deg2rad(60)))))
     def __str__(self):
         return "Triangle"
         
 class line(figure):
-    def __init__(self, x,y):
-        super().__init__(x,y)
+    def __init__(self, x,y,color):
+        super().__init__(x,y,color)
         self.lengh = 100
         self.x1 = self.xcord+self.lengh
         self.y1 = self.ycord
@@ -248,6 +276,9 @@ class line(figure):
         flagGraphics.DrawLine(drawPen,self.xcord, self.ycord, self.x1, self.y1)
     def checkBorder(self, X, Y):
         return self.ycord+15 > Y > self.ycord-15
+    def changeSize(self, val):
+        self.lengh = 100 + val
+        self.x1 = self.xcord+self.lengh
     def __str__(self):
         return "Line"
 
@@ -264,8 +295,10 @@ class form1(System.Windows.Forms.Form):
         self.KeyPreview  = True
 
         self.CtrlPressed = False
-        self.canvas = None
-        self.flagGraphics = None
+        self.leftBPressed = None
+
+        self.canvas = Dr.Bitmap(1, 1)
+        self.flagGraphics = Dr.Graphics.FromImage(self.canvas)
         self.ObjectStorage = ObjectStorage()
 
         self.drawPen = Dr.Pen(Dr.Brushes.DeepSkyBlue)
@@ -284,19 +317,24 @@ class form1(System.Windows.Forms.Form):
         self.SwitchObjCB = WinForm.ComboBox()
         self.ChangeSizeSB = WinForm.HScrollBar()
         self.SizeLabel = WinForm.Label()
+        self.SwitchColorCB = WinForm.ComboBox()
+        self.SwitchColorB = WinForm.Button()
 
         self.ObjectStorage.handler = EventHandler(self.drawObjects)
 
         self.KeyDown += self.Form_KeyDown
         self.KeyUp += self.Form_KeyUp
+        #self.MouseDown += self.Form_MouseDown
+        #self.MouseUp += self.Form_MouseUp
 
         self.ImagePB.Location = Dr.Point(10, 10)
         self.ImagePB.Size = Dr.Size(1200, 700)
         self.ImagePB.TabStop = False
         self.ImagePB.BorderStyle = WinForm.BorderStyle.Fixed3D
         self.ImagePB.MouseDown += self.ImagePB_KeyDown
+        self.ImagePB.MouseUp += self.ImagePB_MouseUp
 
-        self.butt.Location = Dr.Point(1250+60,120)
+        self.butt.Location = Dr.Point(1250+60,420)
         self.butt.Size = Dr.Size(200, 50)
         self.butt.BackColor = Dr.Color.FromArgb(238,238,240)
         self.butt.Text = "Очистить"
@@ -312,8 +350,25 @@ class form1(System.Windows.Forms.Form):
         self.SwitchObjCB.SelectedIndex = 2
         self.SwitchObjCB.DropDownStyle = WinForm.ComboBoxStyle.DropDownList
 
+        self.SwitchColorCB.Location = Dr.Point(1250,220)
+        self.SwitchColorCB.Size = Dr.Size(300,300)
+        self.SwitchColorCB.Sorted = False
+        self.SwitchColorCB.Items.AddRange([ "Black", "Aqua", "DeepSkyBlue", "Brown", "Coral", "HotPink"])
+        self.SwitchColorCB.SelectedIndex = 2
+        self.SwitchColorCB.DropDownStyle = WinForm.ComboBoxStyle.DropDownList
+        
+        self.SwitchColorB.Location = Dr.Point(1250+60,250)
+        self.SwitchColorB.Size = Dr.Size(200, 50)
+        self.SwitchColorB.BackColor = Dr.Color.FromArgb(238,238,240)
+        self.SwitchColorB.Text = "Сменить цвет"
+        self.SwitchColorB.UseVisualStyleBackColor = 0
+        self.SwitchColorB.FlatStyle = WinForm.FlatStyle.Flat
+        self.SwitchColorB.FlatAppearance.BorderSize = 0
+        self.SwitchColorB.Click += self.SwitchColorB_Click
+        
         self.ChangeSizeSB.Location = Dr.Point(1250,50)
         self.ChangeSizeSB.Size = Dr.Size(300,20)
+        self.ChangeSizeSB.ValueChanged += self.ChangeSizeSB_ValueChanged
 
         self.SizeLabel.Location = Dr.Point(1250+120,90)
         self.SizeLabel.Size = Dr.Size(200,20)
@@ -325,6 +380,8 @@ class form1(System.Windows.Forms.Form):
         self.Controls.Add(self.SwitchObjCB)
         self.Controls.Add(self.ChangeSizeSB)
         self.Controls.Add(self.SizeLabel)
+        self.Controls.Add(self.SwitchColorCB)
+        self.Controls.Add(self.SwitchColorB)
     def dispose(self):
         self.components.Dispose()
         WinForm.Form.Dispose(self)
@@ -346,17 +403,30 @@ class form1(System.Windows.Forms.Form):
     def Form_KeyUp(self, sender, args):
         if args.KeyCode == WinForm.Keys.ControlKey:
             self.CtrlPressed = False
-
+    def ImagePB_MouseUp(self, sender, args):
+        if args.Button == WinForm.MouseButtons.Left and self.ObjectStorage.lastPressedNode:
+            deltaX = args.X - self.ObjectStorage.lastPressedNode.key.xcord
+            deltaY = args.Y - self.ObjectStorage.lastPressedNode.key.ycord
+            if (abs(deltaX) > 10 or abs(deltaY) > 10):
+                self.ObjectStorage.changeCordsSelected(deltaX, deltaY)
+            self.ObjectStorage.lastPressedNode = None
 
     def ImagePB_KeyDown(self, sender, args):
         if args.Button == WinForm.MouseButtons.Right:
-            self.ObjectStorage.add(self.ObjectStorage.objectsList[self.SwitchObjCB.SelectedIndex](args.X, args.Y))
+            self.ObjectStorage.add(self.ObjectStorage.objectsList[self.SwitchObjCB.SelectedIndex](args.X, args.Y, self.drawPen.Color))
 
         elif args.Button == WinForm.MouseButtons.Left:
+            self.leftBPressed = True
             if self.ObjectStorage.hitInfo(args.X, args.Y):
                 self.ObjectStorage.select((self.ObjectStorage.hitInfo(args.X, args.Y)), self.CtrlPressed)
+                self.ObjectStorage.lastPressedNode = self.ObjectStorage.hitInfo(args.X, args.Y)
 
-
+    def ChangeSizeSB_ValueChanged(self, sender, args):
+        self.ObjectStorage.changeSizeSelected(self.ChangeSizeSB.Value)
+    
+    def SwitchColorB_Click(self, sender, args):
+        self.drawPen.Color = Dr.Color.FromName(self.SwitchColorCB.SelectedItem)
+        self.ObjectStorage.changeColorSelected(self.drawPen.Color)
 
                     
 
